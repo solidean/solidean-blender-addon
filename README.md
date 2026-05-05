@@ -5,11 +5,10 @@ Exact mesh boolean operations for Blender 5.1+, powered by [Solidean](https://so
 ## Features
 
 - **Intersect**, **Union**, and **Difference** boolean operations
-- Exact arithmetic — no floating-point errors or mesh artifacts
+- **Unconditionally robust**: if Solidean accepts the inputs, the boolean operation is guaranteed to succeed. We'd love to hear about edge cases that break this claim.
 - Popup dialog with operand picker (Shift+E shortcut)
 - Auto-picks the operand from the current selection (active = subject, other selected mesh = operand)
-- **Live Update** — result re-evaluates as you transform either input
-- **Bypass Cache** — fallback for the rare case where third-party plugins mutate mesh data without notifying Blender's depsgraph (see Usage)
+- **Live Update**: result re-evaluates as you transform either input
 - Accessible from the Object menu in the 3D viewport
 
 ## Requirements
@@ -26,13 +25,13 @@ solidean/                         # Blender extension package
   live.py                         # Depsgraph handler driving live updates
   utils.py                        # Mesh <-> numpy conversion, run_boolean
   solidean.py                     # Solidean Python SDK (auto-generated, do not edit)
-  solidean.dll                    # Solidean native library (add this — or .so / .dylib)
+  solidean.dll                    # Solidean native library (add this, or .so / .dylib)
 ```
 
 ## Installation
 
-1. [Download the Solidean native library](https://solidean.com/download/solidean/) for your OS and place it inside the `solidean/` folder next to `__init__.py` (see [Project Structure](#project-structure)).
-   Note: Solidean is commercial software and generally requires a paid license — see [solidean.com](https://solidean.com) for terms and trial availability.
+1. [Download the Solidean Community Edition](https://solidean.com/download/solidean/) for your OS and place the native library inside the `solidean/` folder next to `__init__.py` (see [Project Structure](#project-structure)).
+   The Community Edition is fully featured and free for personal use, evaluation, and research, with no time limit. See the [Community License](https://solidean.com/legal/solidean-community-license/) for details. For commercial use, [get in touch](https://solidean.com) to acquire a license.
 2. Build `solidean.zip`. The build scripts verify that all required files
    (including the native library) are present before zipping:
    - Windows (PowerShell): `./build.ps1`
@@ -51,7 +50,7 @@ solidean/                         # Blender extension package
    - Choose a boolean operation (Intersect / Union / Difference).
    - Confirm or change the **operand** mesh.
    - **Live Update** (on by default) keeps the result in sync as you
-     transform either input. Turn it off for a one-shot bake — the inputs
+     transform either input. Turn it off for a one-shot bake: the inputs
      are then hidden and the result becomes the active selection.
    - **Bypass Cache** forces a fresh mesh extraction on every run; leave off
      for normal use. In Live Update mode we cache each input in our internal
@@ -76,7 +75,7 @@ For debugging, **Window > Toggle System Console** can be helpful.
 ### VS Code: Blender Development extension (recommended)
 
 The [Blender Development](https://marketplace.visualstudio.com/items?itemName=JacquesLucke.blender-development)
-extension by Jacques Lucke streamlines this workflow — it launches Blender
+extension by Jacques Lucke streamlines this workflow: it launches Blender
 with the addon installed, attaches a Python debugger, and reloads the addon
 on demand without restarting Blender.
 
@@ -84,7 +83,7 @@ on demand without restarting Blender.
 2. Open this repo in VS Code.
 3. Command Palette → **Blender: Start**, then point it at your `blender.exe`
    on first run.
-4. Save any plugin file — the addon reloads automatically (this repo ships a
+4. Save any plugin file: the addon reloads automatically (this repo ships a
    `.vscode/settings.json` with `blender.addon.reloadOnSave` enabled). You can
    also trigger it manually via **Blender: Reload Addons**.
 5. Set breakpoints in VS Code; they hit when the operator runs in Blender.
@@ -92,6 +91,7 @@ on demand without restarting Blender.
 ## License
 
 The Python addon code in this repository is licensed under the MIT license
-(see `LICENSE`). The required Solidean native library is proprietary
-software distributed separately — see [solidean.com](https://solidean.com)
-for terms.
+(see `LICENSE`). The Solidean native library is distributed separately
+under the [Solidean Community License](https://solidean.com/legal/solidean-community-license/),
+which is free for personal use, evaluation, and research. For commercial
+use, see [solidean.com](https://solidean.com) to acquire a license.
