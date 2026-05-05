@@ -7,45 +7,42 @@ import bpy
 
 from .utils import (
     BoolOperation,
-    build_mesh_from_arrays,
     invalidate_mesh_cache,
+    replace_mesh_data,
     run_boolean,
 )
 
 
 @dataclass
 class LiveSession:
+    """One result mesh tracked by the depsgraph handler, with the inputs and flags needed to refresh it."""
+
     result_obj: bpy.types.Object
     active: bpy.types.Object
     operand: bpy.types.Object
     bool_operation: BoolOperation
     bypass_cache: bool = False
+    allow_self_intersections: bool = False
+    heal_inputs: bool = False
 
 
 _sessions: list[LiveSession] = []
 _updating: bool = False  # re-entry guard: updating the result mesh triggers another depsgraph event
 
 
-def _replace_mesh(result_obj: bpy.types.Object, positions_f32, tri_indices) -> None:
-    old_mesh = result_obj.data
-    name = old_mesh.name
-    new_mesh = bpy.data.meshes.new("__solidean_live_tmp__")
-    build_mesh_from_arrays(new_mesh, positions_f32, tri_indices)
-    result_obj.data = new_mesh
-    bpy.data.meshes.remove(old_mesh)
-    new_mesh.name = name
-
-
 def _refresh(session: LiveSession) -> None:
+    """Re-run the boolean for one session and write the result back into its output object."""
     positions, indices = run_boolean(
         session.active, session.operand, session.bool_operation,
         bypass_cache=session.bypass_cache,
+        allow_self_intersections=session.allow_self_intersections,
+        heal_inputs=session.heal_inputs,
     )
-    _replace_mesh(session.result_obj, positions, indices)
+    replace_mesh_data(session.result_obj, positions, indices)
 
 
 def _all_alive(*objects: bpy.types.Object) -> bool:
-    """Return False if any object's underlying RNA has been freed."""
+    """Return False if any object's underlying RNA has been freed (touching .name then raises)."""
     try:
         for o in objects:
             o.name
@@ -56,10 +53,15 @@ def _all_alive(*objects: bpy.types.Object) -> bool:
 
 @bpy.app.handlers.persistent
 def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
+    """Refresh any live session whose inputs were transformed or had their geometry edited."""
     global _updating
     if _updating or not _sessions:
         return
 
+    # Phase 1: collect what changed in this depsgraph tick. We iterate the
+    # update list once and key by object name (rather than the bpy.types.Object
+    # itself) because `update.id` is an evaluated copy from the depsgraph and
+    # comparing against the orig object stored on the session is unreliable.
     updated_transforms: set[str] = set()
     updated_geometry: set[str] = set()
     for update in depsgraph.updates:
@@ -72,6 +74,9 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
     if not (updated_transforms or updated_geometry):
         return
 
+    # Phase 2: for each session, decide whether either input was touched
+    # and refresh if so. Sessions whose inputs were deleted are reaped after
+    # the loop — we can't mutate _sessions while iterating it.
     dead: list[LiveSession] = []
     for session in _sessions:
         if not _all_alive(session.active, session.operand, session.result_obj):
@@ -81,6 +86,8 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
         active_name = session.active.name
         operand_name = session.operand.name
 
+        # Geometry edits invalidate the cached numpy arrays for that mesh;
+        # transforms only need a re-run (the cached local-space data is still valid).
         needs_refresh = False
         if active_name in updated_geometry:
             invalidate_mesh_cache(session.active.data)
@@ -92,6 +99,8 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
             needs_refresh = True
 
         if needs_refresh:
+            # _refresh writes the result mesh, which fires another depsgraph
+            # update — guard against re-entry so we don't recurse forever.
             _updating = True
             try:
                 _refresh(session)
@@ -112,21 +121,37 @@ def start(
     result_obj: bpy.types.Object,
     bool_operation: BoolOperation,
     bypass_cache: bool = False,
+    allow_self_intersections: bool = False,
+    heal_inputs: bool = False,
 ) -> None:
+    """Begin tracking a result object so the depsgraph handler keeps it in sync with the inputs."""
     stop(result_obj)  # replace any existing session for this result object
-    _sessions.append(LiveSession(result_obj, active, operand, bool_operation, bypass_cache))
+    _sessions.append(
+        LiveSession(
+            result_obj=result_obj,
+            active=active,
+            operand=operand,
+            bool_operation=bool_operation,
+            bypass_cache=bypass_cache,
+            allow_self_intersections=allow_self_intersections,
+            heal_inputs=heal_inputs,
+        )
+    )
 
 
 def stop(result_obj: bpy.types.Object) -> None:
+    """Drop any sessions whose result object matches result_obj."""
     _sessions[:] = [s for s in _sessions if s.result_obj is not result_obj]
 
 
 def register() -> None:
+    """Attach the depsgraph handler if it isn't already attached."""
     if _on_depsgraph_update not in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.append(_on_depsgraph_update)
 
 
 def unregister() -> None:
+    """Detach the depsgraph handler and discard all live sessions and cached mesh data."""
     if _on_depsgraph_update in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(_on_depsgraph_update)
     _sessions.clear()
