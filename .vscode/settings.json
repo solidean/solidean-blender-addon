@@ -1,0 +1,6 @@
+{
+    "blender.addon.reloadOnSave": true,
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportInvalidTypeForm": "none"
+    }
+}

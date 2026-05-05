@@ -1,0 +1,13 @@
+schema_version = "1.0.0"
+
+id = "solidean"
+version = "0.2.0"
+name = "Solidean"
+tagline = "Exact mesh boolean operations for Blender"
+maintainer = "Shaped Code GmbH"
+type = "add-on"
+
+blender_version_min = "5.1.0"
+license = ["SPDX:MIT"]
+
+[permissions]
