@@ -9,6 +9,10 @@ Exact mesh boolean operations for Blender 5.1+, powered by [Solidean](https://so
 - Popup dialog with operand picker (Shift+E shortcut)
 - Auto-picks the operand from the current selection (active = subject, other selected mesh = operand)
 - **Live Update**: result re-evaluates as you transform either input
+- **Allow Self-Intersections** — opt-in flag for inputs whose surfaces interpenetrate
+- **Heal Inputs** (experimental) — repair non-manifold or open inputs via Solidean's `Heal` pass before the boolean
+- **Check Meshes** — classify each input as `solid`, `has self-intersections`, or `needs healing`
+- **Heal** — bake a Heal + SelfUnion pass into the input mesh data (and operand if set), turning bad input into a true solid
 - Accessible from the Object menu in the 3D viewport
 
 ## Requirements
@@ -45,7 +49,7 @@ solidean/                         # Blender extension package
 1. Select two mesh objects: the **active object** is the subject, the other
    selected mesh is auto-picked as the **operand**. (You can also select just
    the active and pick the operand manually in the dialog.)
-2. Press **Shift+E** or go to **Object > Solidean** in the 3D viewport menu.
+2. Press **Ctrl+Shift+B** or go to **Object > Solidean** in the 3D viewport menu.
 3. In the popup dialog:
    - Choose a boolean operation (Intersect / Union / Difference).
    - Confirm or change the **operand** mesh.
@@ -62,6 +66,20 @@ solidean/                         # Blender extension package
      through the depsgraph, so the change is invisible to us and the cache
      goes stale. If a result looks wrong while live-updating alongside such
      a plugin, enable Bypass Cache.
+   - **Solver Options** (collapsed by default):
+     - **Allow Self-Intersections** tells Solidean the inputs may have
+       interpenetrating surfaces. Off by default — enable only when needed,
+       it has a non-trivial performance cost.
+     - **Heal Inputs (experimental)** runs Solidean's `Heal` pass on each
+       input first, repairing holes and other non-manifold defects into a
+       supersolid mesh. Use for "bad input" geometry.
+     - **Check Meshes** classifies the active object and operand as
+       `solid`, `has self-intersections`, or `needs healing`, to help you
+       decide which of the flags above to enable.
+     - **Heal** destructively rewrites the active object's mesh data
+       (plus the operand's, if one is set) to a `Heal` + `SelfUnion`
+       result, producing a true solid. Use this once to permanently fix
+       a bad input rather than paying for `Heal Inputs` on every run.
 4. Click **OK** to execute. The result appears as a new object.
 
 ## Development
