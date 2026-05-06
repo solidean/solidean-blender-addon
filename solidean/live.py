@@ -58,7 +58,6 @@ def _all_alive(*objects: bpy.types.Object) -> bool:
 def _on_frame_change(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
     """Refresh all live sessions on frame changes (animation playback)."""
     global _updating
-    # print(f"[solidean] frame_change_post fired  frame={scene.frame_current}  sessions={len(_sessions)}")
     if _updating or not _sessions:
         return
     dead: list[LiveSession] = []
@@ -68,10 +67,6 @@ def _on_frame_change(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> 
             if not _all_alive(session.active, session.operand, session.result_obj):
                 dead.append(session)
                 continue
-            # eval_a = session.active.evaluated_get(depsgraph)
-            # eval_b = session.operand.evaluated_get(depsgraph)
-            # print(f"[solidean]   {session.active.name}: {eval_a.matrix_world.translation[:]!r}")
-            # print(f"[solidean]   {session.operand.name}: {eval_b.matrix_world.translation[:]!r}")
             try:
                 _refresh(session)
             except Exception:
@@ -90,7 +85,6 @@ def _on_frame_change(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> 
 def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
     """Refresh any live session whose inputs were transformed or had their geometry edited."""
     global _updating, _last_frame
-    # print(f"[solidean] depsgraph_update_post fired  frame={scene.frame_current}  sessions={len(_sessions)}  updating={_updating}")
     if _updating or not _sessions:
         return
 
@@ -117,13 +111,6 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
 
     if not (frame_changed or updated_transforms or updated_geometry):
         return
-
-    if frame_changed:
-        for session in _sessions:
-            if _all_alive(session.active, session.operand):
-                t_a = session.active.matrix_world.translation
-                t_b = session.operand.matrix_world.translation
-                print(f"[solidean] frame {current_frame}  {session.active.name}: {t_a[:]!r}  {session.operand.name}: {t_b[:]!r}")
 
     # Phase 2: for each session, decide whether either input was touched
     # and refresh if so. Sessions whose inputs were deleted are reaped after
