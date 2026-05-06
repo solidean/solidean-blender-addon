@@ -24,10 +24,13 @@ class LiveSession:
     bypass_cache: bool = False
     allow_self_intersections: bool = False
     heal_inputs: bool = False
+    active_display_type: str = "SOLID"  # original values captured at start() so stop() can restore them
+    operand_display_type: str = "SOLID"
 
 
 _sessions: list[LiveSession] = []
 _updating: bool = False  # re-entry guard: updating the result mesh triggers another depsgraph event
+_last_frame: int = globals().get("_last_frame", -1)  # frame seen on last depsgraph tick
 
 
 def _refresh(session: LiveSession) -> None:
@@ -52,9 +55,42 @@ def _all_alive(*objects: bpy.types.Object) -> bool:
 
 
 @bpy.app.handlers.persistent
+def _on_frame_change(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
+    """Refresh all live sessions on frame changes (animation playback)."""
+    global _updating
+    # print(f"[solidean] frame_change_post fired  frame={scene.frame_current}  sessions={len(_sessions)}")
+    if _updating or not _sessions:
+        return
+    dead: list[LiveSession] = []
+    _updating = True
+    try:
+        for session in _sessions:
+            if not _all_alive(session.active, session.operand, session.result_obj):
+                dead.append(session)
+                continue
+            # eval_a = session.active.evaluated_get(depsgraph)
+            # eval_b = session.operand.evaluated_get(depsgraph)
+            # print(f"[solidean]   {session.active.name}: {eval_a.matrix_world.translation[:]!r}")
+            # print(f"[solidean]   {session.operand.name}: {eval_b.matrix_world.translation[:]!r}")
+            try:
+                _refresh(session)
+            except Exception:
+                traceback.print_exc()
+    finally:
+        _updating = False
+    for s in dead:
+        _sessions.remove(s)
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == 'VIEW_3D':
+                area.tag_redraw()
+
+
+@bpy.app.handlers.persistent
 def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
     """Refresh any live session whose inputs were transformed or had their geometry edited."""
-    global _updating
+    global _updating, _last_frame
+    # print(f"[solidean] depsgraph_update_post fired  frame={scene.frame_current}  sessions={len(_sessions)}  updating={_updating}")
     if _updating or not _sessions:
         return
 
@@ -62,6 +98,14 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
     # update list once and key by object name (rather than the bpy.types.Object
     # itself) because `update.id` is an evaluated copy from the depsgraph and
     # comparing against the orig object stored on the session is unreliable.
+    #
+    # Frame changes during animation don't produce per-Object transform entries —
+    # Blender reports a Scene update instead. Detect them by comparing the frame
+    # counter so animated inputs are caught the same way as interactive moves.
+    current_frame = scene.frame_current
+    frame_changed = current_frame != _last_frame
+    _last_frame = current_frame
+
     updated_transforms: set[str] = set()
     updated_geometry: set[str] = set()
     for update in depsgraph.updates:
@@ -71,8 +115,15 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
             if update.is_updated_geometry:
                 updated_geometry.add(update.id.name)
 
-    if not (updated_transforms or updated_geometry):
+    if not (frame_changed or updated_transforms or updated_geometry):
         return
+
+    if frame_changed:
+        for session in _sessions:
+            if _all_alive(session.active, session.operand):
+                t_a = session.active.matrix_world.translation
+                t_b = session.operand.matrix_world.translation
+                print(f"[solidean] frame {current_frame}  {session.active.name}: {t_a[:]!r}  {session.operand.name}: {t_b[:]!r}")
 
     # Phase 2: for each session, decide whether either input was touched
     # and refresh if so. Sessions whose inputs were deleted are reaped after
@@ -88,7 +139,7 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
 
         # Geometry edits invalidate the cached numpy arrays for that mesh;
         # transforms only need a re-run (the cached local-space data is still valid).
-        needs_refresh = False
+        needs_refresh = frame_changed
         if active_name in updated_geometry:
             invalidate_mesh_cache(session.active.data)
             needs_refresh = True
@@ -113,6 +164,19 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
 
     for s in dead:
         _sessions.remove(s)
+        # Restore input object display types and enable depth check for result object
+        for obj, display_type in (
+            (s.active, s.active_display_type),
+            (s.operand, s.operand_display_type),
+        ):
+            try:
+                obj.display_type = display_type
+            except ReferenceError:
+                pass
+        try:
+            s.result_obj.show_in_front = False
+        except ReferenceError:
+            pass
 
 
 def start(
@@ -135,24 +199,48 @@ def start(
             bypass_cache=bypass_cache,
             allow_self_intersections=allow_self_intersections,
             heal_inputs=heal_inputs,
+            active_display_type=active.display_type,  # capture before overwriting
+            operand_display_type=operand.display_type,
         )
     )
+    # Inputs show as wire while live so the result stays visually dominant
+    active.display_type = "WIRE"
+    operand.display_type = "WIRE"
+    result_obj.show_in_front = True
 
 
 def stop(result_obj: bpy.types.Object) -> None:
-    """Drop any sessions whose result object matches result_obj."""
+    """Drop any sessions whose result object matches result_obj, restoring input display types."""
+    for s in _sessions:
+        if s.result_obj is result_obj:
+            try:
+                s.active.display_type = s.active_display_type
+                s.operand.display_type = s.operand_display_type
+                result_obj.show_in_front = False
+            except ReferenceError:
+                pass
+            break
     _sessions[:] = [s for s in _sessions if s.result_obj is not result_obj]
 
 
+def has_session(result_obj: bpy.types.Object) -> bool:
+    """Return True if result_obj is currently tracked by a live session."""
+    return any(s.result_obj is result_obj for s in _sessions)
+
+
 def register() -> None:
-    """Attach the depsgraph handler if it isn't already attached."""
+    """Attach the depsgraph and frame-change handlers if they aren't already attached."""
     if _on_depsgraph_update not in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.append(_on_depsgraph_update)
+    if _on_frame_change not in bpy.app.handlers.frame_change_post:
+        bpy.app.handlers.frame_change_post.append(_on_frame_change)
 
 
 def unregister() -> None:
-    """Detach the depsgraph handler and discard all live sessions and cached mesh data."""
+    """Detach all handlers and discard all live sessions and cached mesh data."""
     if _on_depsgraph_update in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(_on_depsgraph_update)
+    if _on_frame_change in bpy.app.handlers.frame_change_post:
+        bpy.app.handlers.frame_change_post.remove(_on_frame_change)
     _sessions.clear()
     invalidate_mesh_cache()

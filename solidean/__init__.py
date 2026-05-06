@@ -25,7 +25,6 @@ _STATUS_LABELS: dict[str, str] = {
     "needs-healing": "needs healing",
 }
 
-
 def _create_result_mesh(
     name: str,
     positions_f32: npt.NDArray[np.float32],
@@ -281,9 +280,28 @@ class SOLIDEAN_OT_boolean(bpy.types.Operator):
         return context.active_object is not None and context.active_object.type == "MESH"
 
 
+class SOLIDEAN_OT_stop_live(bpy.types.Operator):
+    """Stop live update tracking for the active result object and restore input display"""
+
+    bl_idname = "modifier.solidean_stop_live"
+    bl_label = "Stop Live Update"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context) -> bool:
+        # Only show in the menu when the active object is a live result, so the entry doesn't clutter other contexts
+        return context.active_object is not None and live.has_session(context.active_object)
+
+    def execute(self, context: bpy.types.Context) -> set[str]:
+        live.stop(context.active_object)
+        return {"FINISHED"}
+
+
 def menu_func(self, context: bpy.types.Context) -> None:
-    """Append the Solidean operator entry to the 3D viewport's Object menu."""
+    """Append Solidean entries to the 3D viewport's Object menu."""
     self.layout.operator(SOLIDEAN_OT_boolean.bl_idname)
+    if context.active_object is not None and live.has_session(context.active_object):
+        self.layout.operator(SOLIDEAN_OT_stop_live.bl_idname)
 
 
 def _operand_poll(self, obj: bpy.types.Object) -> bool:
@@ -311,6 +329,7 @@ def register() -> None:
     bpy.utils.register_class(SOLIDEAN_OT_check_meshes)
     bpy.utils.register_class(SOLIDEAN_OT_heal_meshes)
     bpy.utils.register_class(SOLIDEAN_OT_boolean)
+    bpy.utils.register_class(SOLIDEAN_OT_stop_live)
     bpy.types.VIEW3D_MT_object.append(menu_func)
     live.register()
 
@@ -331,6 +350,7 @@ def unregister() -> None:
         km.keymap_items.remove(kmi)
     addon_keymaps.clear()
 
+    bpy.utils.unregister_class(SOLIDEAN_OT_stop_live)
     bpy.utils.unregister_class(SOLIDEAN_OT_boolean)
     bpy.utils.unregister_class(SOLIDEAN_OT_heal_meshes)
     bpy.utils.unregister_class(SOLIDEAN_OT_check_meshes)
