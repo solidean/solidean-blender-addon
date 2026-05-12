@@ -44,6 +44,14 @@ def _refresh(session: LiveSession) -> None:
     replace_mesh_data(session.result_obj, positions, indices)
 
 
+def _is_input_elsewhere(obj: bpy.types.Object, excluding: LiveSession) -> bool:
+    """Return True if obj is still an active or operand in any session other than excluding."""
+    return any(
+        s is not excluding and (s.active is obj or s.operand is obj)
+        for s in _sessions
+    )
+
+
 def _all_alive(*objects: bpy.types.Object) -> bool:
     """Return False if any object's underlying RNA has been freed (touching .name then raises)."""
     try:
@@ -109,16 +117,19 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
             if update.is_updated_geometry:
                 updated_geometry.add(update.id.name)
 
-    if not (frame_changed or updated_transforms or updated_geometry):
-        return
+    something_changed = frame_changed or bool(updated_transforms) or bool(updated_geometry)
 
-    # Phase 2: for each session, decide whether either input was touched
-    # and refresh if so. Sessions whose inputs were deleted are reaped after
-    # the loop — we can't mutate _sessions while iterating it.
+    # Phase 2: always scan for dead sessions so result-mesh deletion is caught
+    # even when no transform/geometry update is present in this tick. Only run
+    # the boolean refresh when something actually changed.
     dead: list[LiveSession] = []
     for session in _sessions:
-        if not _all_alive(session.active, session.operand, session.result_obj):
+        if (not _all_alive(session.active, session.operand, session.result_obj)
+                or depsgraph.objects.get(session.result_obj.name) is None):
             dead.append(session)
+            continue
+
+        if not something_changed:
             continue
 
         active_name = session.active.name
@@ -151,11 +162,12 @@ def _on_depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph)
 
     for s in dead:
         _sessions.remove(s)
-        # Restore input object display types and enable depth check for result object
         for obj, display_type in (
             (s.active, s.active_display_type),
             (s.operand, s.operand_display_type),
         ):
+            if _is_input_elsewhere(obj, s):
+                continue
             try:
                 obj.display_type = display_type
             except ReferenceError:
@@ -200,9 +212,17 @@ def stop(result_obj: bpy.types.Object) -> None:
     """Drop any sessions whose result object matches result_obj, restoring input display types."""
     for s in _sessions:
         if s.result_obj is result_obj:
+            for obj, display_type in (
+                (s.active, s.active_display_type),
+                (s.operand, s.operand_display_type),
+            ):
+                if _is_input_elsewhere(obj, s):
+                    continue
+                try:
+                    obj.display_type = display_type
+                except ReferenceError:
+                    pass
             try:
-                s.active.display_type = s.active_display_type
-                s.operand.display_type = s.operand_display_type
                 result_obj.show_in_front = False
             except ReferenceError:
                 pass

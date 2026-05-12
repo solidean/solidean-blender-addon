@@ -259,6 +259,10 @@ class SOLIDEAN_OT_boolean(bpy.types.Operator):
 
     def invoke(self, context: bpy.types.Context, event: bpy.types.Event) -> set[str]:
         """Pre-fill the operand from the current selection and open the props dialog."""
+        operand = context.scene.solidean_operand
+        if operand is not None and operand.name not in context.scene.objects:
+            context.scene.solidean_operand = None
+
         if context.active_object == context.scene.solidean_operand:
             context.scene.solidean_operand = None
 
