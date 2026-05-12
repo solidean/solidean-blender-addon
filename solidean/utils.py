@@ -65,6 +65,7 @@ def build_mesh_from_arrays(
     mesh.polygons.add(n_tris)
     mesh.polygons.foreach_set("loop_start", np.arange(0, n_tris * 3, 3, dtype=np.int32))
     mesh.polygons.foreach_set("loop_total", np.full(n_tris, 3, dtype=np.int32))
+    mesh.polygons.foreach_set("use_smooth", np.zeros(n_tris, dtype=bool))
 
     mesh.update(calc_edges=True)
 

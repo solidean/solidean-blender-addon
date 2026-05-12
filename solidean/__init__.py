@@ -25,7 +25,6 @@ _STATUS_LABELS: dict[str, str] = {
     "needs-healing": "needs healing",
 }
 
-
 def _create_result_mesh(
     name: str,
     positions_f32: npt.NDArray[np.float32],
@@ -134,7 +133,6 @@ class SOLIDEAN_OT_boolean(bpy.types.Operator):
         options=set(),
     )
 
-    show_solver_options: bpy.props.BoolProperty(name="Solver Options")
     allow_self_intersections: bpy.props.BoolProperty(
         name="Allow Self-Intersections",
         description=(
@@ -236,30 +234,34 @@ class SOLIDEAN_OT_boolean(bpy.types.Operator):
         row = col.row(align=True)
         row.prop(self, "live_update")
         row.prop(self, "bypass_cache")
-        col.prop(
-            self,
-            "show_solver_options",
-            text="Solver Options",
-            icon="TRIA_DOWN" if self.show_solver_options else "TRIA_RIGHT",
-        )
 
-        if self.show_solver_options:
-            box = col.box()
-            box.prop(self, "allow_self_intersections")
-            box.prop(self, "heal_inputs")
-            check_row = box.row(align=True)
-            check_row.operator(SOLIDEAN_OT_check_meshes.bl_idname, icon="VIEWZOOM")
-            check_row.operator(SOLIDEAN_OT_heal_meshes.bl_idname, icon="MODIFIER_DATA")
-            scene = context.scene
-            active_status = scene.solidean_check_active_status
-            operand_status = scene.solidean_check_operand_status
-            if active_status:
-                box.label(text=f"Active: {active_status}")
-            if operand_status:
-                box.label(text=f"Operand: {operand_status}")
+        col.prop(self, "allow_self_intersections")
+        col.prop(self, "heal_inputs")
+        scene = context.scene
+        active_status = scene.solidean_check_active_status
+        operand_status = scene.solidean_check_operand_status
+
+
+        check_row = col.row(align=True)
+        check_row.operator(SOLIDEAN_OT_check_meshes.bl_idname, icon="VIEWZOOM")
+
+        heal_btn = check_row.row(align=True)
+        heal_btn.operator(SOLIDEAN_OT_heal_meshes.bl_idname, icon="MODIFIER_DATA")
+
+        if active_status:
+            col.label(text=f"Active: {active_status}")
+        if operand_status:
+            col.label(text=f"Operand: {operand_status}")
+
+        col.separator()
+        col.label(text="Note: if operation fails try healing the meshes", icon="INFO")
 
     def invoke(self, context: bpy.types.Context, event: bpy.types.Event) -> set[str]:
         """Pre-fill the operand from the current selection and open the props dialog."""
+        operand = context.scene.solidean_operand
+        if operand is not None and operand.name not in context.scene.objects:
+            context.scene.solidean_operand = None
+
         if context.active_object == context.scene.solidean_operand:
             context.scene.solidean_operand = None
 
@@ -274,16 +276,35 @@ class SOLIDEAN_OT_boolean(bpy.types.Operator):
                 context.scene.solidean_operand = candidates[0]
 
         self.is_done = False
-        return context.window_manager.invoke_props_dialog(self)
+        return context.window_manager.invoke_props_dialog(self, confirm_text="Execute")
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
         return context.active_object is not None and context.active_object.type == "MESH"
 
 
+class SOLIDEAN_OT_stop_live(bpy.types.Operator):
+    """Stop live update tracking for the active result object and restore input display"""
+
+    bl_idname = "modifier.solidean_stop_live"
+    bl_label = "Stop Live Update"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context) -> bool:
+        # Only show in the menu when the active object is a live result, so the entry doesn't clutter other contexts
+        return context.active_object is not None and live.has_session(context.active_object)
+
+    def execute(self, context: bpy.types.Context) -> set[str]:
+        live.stop(context.active_object)
+        return {"FINISHED"}
+
+
 def menu_func(self, context: bpy.types.Context) -> None:
-    """Append the Solidean operator entry to the 3D viewport's Object menu."""
+    """Append Solidean entries to the 3D viewport's Object menu."""
     self.layout.operator(SOLIDEAN_OT_boolean.bl_idname)
+    if context.active_object is not None and live.has_session(context.active_object):
+        self.layout.operator(SOLIDEAN_OT_stop_live.bl_idname)
 
 
 def _operand_poll(self, obj: bpy.types.Object) -> bool:
@@ -311,6 +332,7 @@ def register() -> None:
     bpy.utils.register_class(SOLIDEAN_OT_check_meshes)
     bpy.utils.register_class(SOLIDEAN_OT_heal_meshes)
     bpy.utils.register_class(SOLIDEAN_OT_boolean)
+    bpy.utils.register_class(SOLIDEAN_OT_stop_live)
     bpy.types.VIEW3D_MT_object.append(menu_func)
     live.register()
 
@@ -331,6 +353,7 @@ def unregister() -> None:
         km.keymap_items.remove(kmi)
     addon_keymaps.clear()
 
+    bpy.utils.unregister_class(SOLIDEAN_OT_stop_live)
     bpy.utils.unregister_class(SOLIDEAN_OT_boolean)
     bpy.utils.unregister_class(SOLIDEAN_OT_heal_meshes)
     bpy.utils.unregister_class(SOLIDEAN_OT_check_meshes)
