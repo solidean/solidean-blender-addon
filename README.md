@@ -2,7 +2,11 @@
 
 Exact mesh boolean operations for Blender 5.1+, powered by [Solidean](https://solidean.com).
 
+https://github.com/user-attachments/assets/10460075-6a41-4fda-9ab6-a6bf92e634af
+
 ## Features
+
+<img width="500" height="434" alt="Solidean - Blender Add-On UI" src="https://github.com/user-attachments/assets/fd2e1ff3-5165-4e53-bf16-6accfa320135" />
 
 - **Intersect**, **Union**, and **Difference** boolean operations
 - **Unconditionally robust**: if Solidean accepts the inputs, the boolean operation is guaranteed to succeed. We'd love to hear about edge cases that break this claim.
