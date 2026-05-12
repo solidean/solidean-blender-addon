@@ -133,7 +133,6 @@ class SOLIDEAN_OT_boolean(bpy.types.Operator):
         options=set(),
     )
 
-    show_solver_options: bpy.props.BoolProperty(name="Solver Options")
     allow_self_intersections: bpy.props.BoolProperty(
         name="Allow Self-Intersections",
         description=(
@@ -235,27 +234,20 @@ class SOLIDEAN_OT_boolean(bpy.types.Operator):
         row = col.row(align=True)
         row.prop(self, "live_update")
         row.prop(self, "bypass_cache")
-        col.prop(
-            self,
-            "show_solver_options",
-            text="Solver Options",
-            icon="TRIA_DOWN" if self.show_solver_options else "TRIA_RIGHT",
-        )
 
-        if self.show_solver_options:
-            box = col.box()
-            box.prop(self, "allow_self_intersections")
-            box.prop(self, "heal_inputs")
-            check_row = box.row(align=True)
-            check_row.operator(SOLIDEAN_OT_check_meshes.bl_idname, icon="VIEWZOOM")
-            check_row.operator(SOLIDEAN_OT_heal_meshes.bl_idname, icon="MODIFIER_DATA")
-            scene = context.scene
-            active_status = scene.solidean_check_active_status
-            operand_status = scene.solidean_check_operand_status
-            if active_status:
-                box.label(text=f"Active: {active_status}")
-            if operand_status:
-                box.label(text=f"Operand: {operand_status}")
+        col.prop(self, "allow_self_intersections")
+        col.prop(self, "heal_inputs")
+        scene = context.scene
+        active_status = scene.solidean_check_active_status
+        operand_status = scene.solidean_check_operand_status
+
+        if active_status:
+            col.label(text=f"Active: {active_status}")
+        if operand_status:
+            col.label(text=f"Operand: {operand_status}")
+
+        col.separator()
+        col.label(text="Note: if operation fails try healing the meshes", icon="INFO")
 
     def invoke(self, context: bpy.types.Context, event: bpy.types.Event) -> set[str]:
         """Pre-fill the operand from the current selection and open the props dialog."""
@@ -277,7 +269,7 @@ class SOLIDEAN_OT_boolean(bpy.types.Operator):
                 context.scene.solidean_operand = candidates[0]
 
         self.is_done = False
-        return context.window_manager.invoke_props_dialog(self)
+        return context.window_manager.invoke_props_dialog(self, confirm_text="Execute")
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
