@@ -241,6 +241,13 @@ class SOLIDEAN_OT_boolean(bpy.types.Operator):
         active_status = scene.solidean_check_active_status
         operand_status = scene.solidean_check_operand_status
 
+
+        check_row = col.row(align=True)
+        check_row.operator(SOLIDEAN_OT_check_meshes.bl_idname, icon="VIEWZOOM")
+
+        heal_btn = check_row.row(align=True)
+        heal_btn.operator(SOLIDEAN_OT_heal_meshes.bl_idname, icon="MODIFIER_DATA")
+
         if active_status:
             col.label(text=f"Active: {active_status}")
         if operand_status:
