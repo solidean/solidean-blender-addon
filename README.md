@@ -9,10 +9,10 @@ Exact mesh boolean operations for Blender 5.1+, powered by [Solidean](https://so
 - Popup dialog with operand picker (Shift+E shortcut)
 - Auto-picks the operand from the current selection (active = subject, other selected mesh = operand)
 - **Live Update**: result re-evaluates as you transform either input
-- **Allow Self-Intersections** — opt-in flag for inputs whose surfaces interpenetrate
-- **Heal Inputs** (experimental) — repair non-manifold or open inputs via Solidean's `Heal` pass before the boolean
-- **Check Meshes** — classify each input as `solid`, `has self-intersections`, or `needs healing`
-- **Heal** — bake a Heal + SelfUnion pass into the input mesh data (and operand if set), turning bad input into a true solid
+- **Allow Self-Intersections**: opt-in flag for inputs whose surfaces interpenetrate
+- **Heal Inputs** (experimental): repair non-manifold or open inputs via Solidean's `Heal` pass before the boolean
+- **Check Meshes**: classify each input as `solid`, `has self-intersections`, or `needs healing`
+- **Heal**: bake a Heal + SelfUnion pass into the input mesh data (and operand if set), turning bad input into a true solid
 - Accessible from the Object menu in the 3D viewport
 
 ## Requirements
@@ -68,7 +68,7 @@ solidean/                         # Blender extension package
      a plugin, enable Bypass Cache.
    - **Solver Options** (collapsed by default):
      - **Allow Self-Intersections** tells Solidean the inputs may have
-       interpenetrating surfaces. Off by default — enable only when needed,
+       interpenetrating surfaces. Off by default: enable only when needed,
        it has a non-trivial performance cost.
      - **Heal Inputs (experimental)** runs Solidean's `Heal` pass on each
        input first, repairing holes and other non-manifold defects into a
